@@ -76,6 +76,10 @@ bookmarks: dict = {}
 # {login}
 blacklist: set = set()
 
+# Відстеження листування: {thread_id: last_message_at}
+# Зберігаємо час останнього повідомлення в кожному треді
+thread_last_msg: dict = {}
+
 # [{remind_at, pid, name, url}]
 reminders: list = []
 
@@ -230,15 +234,25 @@ def get_new_messages():
         return []
     result = []
     for thread in data.get("data", []):
-        tid    = thread.get("id")
-        attr   = thread.get("attributes", {})
+        tid  = str(thread.get("id"))
+        attr = thread.get("attributes", {})
+
+        # Беремо час останнього повідомлення в треді
+        last_at = (
+            attr.get("last_message_at") or
+            attr.get("updated_at") or
+            attr.get("created_at") or ""
+        )
+        # Також враховуємо unread_count як запасний варіант
         unread = attr.get("unread_count", 0)
-        if tid not in seen_thread_ids:
-            seen_thread_ids.add(tid)
-            if unread > 0:
-                result.append(thread)
+
+        if tid not in thread_last_msg:
+            # Перший раз бачимо тред — запам'ятовуємо, не надсилаємо
+            thread_last_msg[tid] = last_at
         else:
-            if unread > 0:
+            # Є новий лист якщо: час оновився АБО є непрочитані і час є
+            if last_at and last_at != thread_last_msg[tid]:
+                thread_last_msg[tid] = last_at
                 result.append(thread)
     return result
 
@@ -329,32 +343,43 @@ def format_message_thread(thread):
     links        = thread.get("links", {})
     subject      = attr.get("subject") or "Нове повідомлення"
     participants = attr.get("participants") or []
-    sender       = participants[0].get("login", "Невідомо") if participants else "Невідомо"
     unread       = attr.get("unread_count", 0)
-    self_link    = (links.get("self") or {})
-    url          = self_link.get("href", "https://freelancehunt.com/mailbox/") if isinstance(self_link, dict) else "https://freelancehunt.com/mailbox/"
+
+    # Знаходимо відправника
+    sender = "Невідомо"
+    for p in participants:
+        login = p.get("login", "")
+        if login:
+            sender = login
+            break
+
+    # Останнє повідомлення якщо є
+    last_msg     = attr.get("last_message") or {}
+    last_body    = (last_msg.get("body") or last_msg.get("message") or "").strip()
+    last_preview = last_body[:200] + ("..." if len(last_body) > 200 else "")
+
+    # Правильний URL переписки
+    self_link = links.get("self") or {}
+    raw_url   = self_link.get("href", "") if isinstance(self_link, dict) else ""
+    tid       = str(thread.get("id", ""))
+    if raw_url and "api.freelancehunt.com" not in raw_url:
+        url = raw_url
+    elif tid:
+        url = f"https://freelancehunt.com/mailbox/{tid}"
+    else:
+        url = "https://freelancehunt.com/mailbox/"
+
+    unread_str = f"\n📬 Непрочитаних: {unread}" if unread > 0 else ""
 
     text = (
         f"💬 <b>Нове повідомлення</b>\n\n"
-        f"📧 Тема: {subject}\n"
-        f"👤 Від: {sender}\n"
-        f"📬 Непрочитаних: {unread}"
+        f"📧 <b>{subject}</b>\n"
+        f"👤 Від: <b>{sender}</b>"
+        + unread_str
+        + (f"\n\n✉️ {last_preview}" if last_preview else "")
     )
     keyboard = {"inline_keyboard": [[{"text": "📨 Відкрити переписку", "url": url}]]}
     return text, keyboard
-
-
-FEED_LABELS = {
-    "bid_placed":        "📥 Нова пропозиція на твій проект",
-    "bid_won":           "🏆 Ти виграв тендер!",
-    "bid_rejected":      "❌ Пропозицію відхилено",
-    "project_done":      "✔️ Проект завершено",
-    "employer_review":   "⭐ Замовник залишив відгук",
-    "freelancer_review": "⭐ Фрілансер залишив відгук",
-    "project_status":    "🔄 Статус проекту змінено",
-    "contest_winner":    "🥇 Переможець конкурсу",
-    "new_contest":       "🎯 Новий конкурс",
-}
 
 
 def format_feed_item(item):
@@ -1047,8 +1072,15 @@ def init_seen():
     threads = fh_get("/my/threads")
     if threads:
         for t in threads.get("data", []):
-            if tid := t.get("id"):
-                seen_thread_ids.add(tid)
+            tid  = str(t.get("id", ""))
+            attr = t.get("attributes", {})
+            last_at = (
+                attr.get("last_message_at") or
+                attr.get("updated_at") or
+                attr.get("created_at") or ""
+            )
+            if tid:
+                thread_last_msg[tid] = last_at
     feed = fh_get("/my/feed")
     if feed:
         for f in feed.get("data", []):
