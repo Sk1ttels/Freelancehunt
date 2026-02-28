@@ -1,118 +1,49 @@
-# Інструкція з налаштування на VPS
+# Freelancehunt → Telegram Bot
 
-## Крок 1 — Отримай токени
-
-### Telegram Bot Token
-1. Відкрий Telegram → знайди @BotFather
-2. Надішли `/newbot`
-3. Дай боту ім'я і username (напр. `MyFreelancehuntBot`)
-4. Скопіюй токен виду `1234567890:AAxxxxxxx`
-
-### Твій Telegram Chat ID
-1. Відкрий @userinfobot або @getmyid_bot у Telegram
-2. Натисни `/start` — він поверне твій `chat_id` (число)
-
-### Freelancehunt API Token
-1. Зайди на https://freelancehunt.com/my/api
-2. Створи новий токен
-3. Скопіюй його
+Бот надсилає в Telegram нові проекти, повідомлення та сповіщення з Freelancehunt.
+Хоститься на Railway, автодеплой з GitHub.
 
 ---
 
-## Крок 2 — Залий файли на VPS
+## Деплой на Railway (через GitHub)
 
-```bash
-# На своєму комп'ютері (або через FileZilla / SCP)
-scp -r ./freelancehunt_bot ubuntu@YOUR_SERVER_IP:/home/ubuntu/
+### Крок 1 — Залий файли в репо
+
+Потрібні файли в корені репо `Sk1ttels/Freelancehunt`:
 ```
+bot.py
+requirements.txt
+Procfile
+nixpacks.toml
+```
+
+> `.env` файл НЕ заливай в GitHub — токени додаються через Railway Variables.
+
+### Крок 2 — Додай змінні в Railway
+
+Відкрий свій сервіс → вкладка Variables → додай:
+
+| Key                      | Value                        |
+|--------------------------|------------------------------|
+| TELEGRAM_BOT_TOKEN       | токен від @BotFather         |
+| TELEGRAM_CHAT_ID         | твій chat_id                 |
+| FREELANCEHUNT_TOKEN      | токен з freelancehunt.com/my/api |
+| CHECK_INTERVAL_SECONDS   | 300                          |
+| SKILL_IDS                | (залиш пустим)               |
+
+### Крок 3 — Deploy
+
+Натисни Deploy або зроби git push — Railway сам збере і запустить бота.
+
+Перевір вкладку Logs — має з'явитися запис про запуск,
+і в Telegram прийде повідомлення "Freelancehunt бот запущено!"
 
 ---
 
-## Крок 3 — Налаштуй на сервері
+## Що надсилає бот
 
-```bash
-# Підключись до сервера
-ssh ubuntu@YOUR_SERVER_IP
+- Нові проекти — з кнопками "Відкрити проект" і "Профіль замовника"
+- Нові повідомлення — непрочитані листи від клієнтів
+- Сповіщення — виграш тендеру, відгуки, зміни статусу
 
-# Перейди в папку бота
-cd /home/ubuntu/freelancehunt_bot
-
-# Створи .env з прикладу
-cp .env.example .env
-nano .env
-# Заповни всі 3 токени і збережи (Ctrl+X → Y → Enter)
-
-# Встанови Python (якщо ще немає)
-sudo apt update && sudo apt install -y python3 python3-pip python3-venv
-
-# Створи віртуальне середовище
-python3 -m venv venv
-
-# Активуй і встанови залежності
-source venv/bin/activate
-pip install -r requirements.txt
-```
-
----
-
-## Крок 4 — Перевір що все працює
-
-```bash
-python bot.py
-```
-
-Якщо все ок — побачиш в Telegram повідомлення "Freelancehunt бот запущено!"  
-Зупини: `Ctrl + C`
-
----
-
-## Крок 5 — Налаштуй автозапуск через systemd
-
-```bash
-# Відредагуй шлях у файлі сервісу (якщо твій юзер не ubuntu)
-nano freelancehunt-bot.service
-# Зміни User= і WorkingDirectory= якщо потрібно
-
-# Скопіюй файл сервісу
-sudo cp freelancehunt-bot.service /etc/systemd/system/
-
-# Активуй і запусти
-sudo systemctl daemon-reload
-sudo systemctl enable freelancehunt-bot
-sudo systemctl start freelancehunt-bot
-```
-
----
-
-## Корисні команди
-
-```bash
-# Перевірити статус
-sudo systemctl status freelancehunt-bot
-
-# Переглянути логи в реальному часі
-sudo journalctl -u freelancehunt-bot -f
-
-# Переглянути файл логів
-tail -f /home/ubuntu/freelancehunt_bot/bot.log
-
-# Перезапустити бота
-sudo systemctl restart freelancehunt-bot
-
-# Зупинити бота
-sudo systemctl stop freelancehunt-bot
-```
-
----
-
-## Фільтр за навичками (необов'язково)
-
-Якщо хочеш отримувати тільки проекти за своїми навичками — заповни `SKILL_IDS` у `.env`.
-
-Список всіх навичок і їх ID:
-https://api.freelancehunt.com/v2/skills
-
-Приклад для Python + Django:
-```
-SKILL_IDS=22,23
-```
+Перевірка кожні 5 хвилин.
