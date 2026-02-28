@@ -1,0 +1,16 @@
+[Unit]
+Description=Freelancehunt Telegram Bot
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/freelancehunt_bot
+ExecStart=/home/ubuntu/freelancehunt_bot/venv/bin/python bot.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
